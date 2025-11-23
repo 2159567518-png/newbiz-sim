@@ -2,13 +2,13 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>NewBiz Render Test</title>
+  <title>NewBiz WebSocket 测试</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 </head>
 
 <body>
-  <h1>NewBiz Render 测试页面</h1>
-  <p id="status">正在连接服务器...</p>
+  <h1>NewBiz Render (gevent) 测试</h1>
+  <div id="status">正在连接服务器...</div>
 
   <script>
     var socket = io();
@@ -18,13 +18,12 @@
     });
 
     socket.on("broadcast_action", function(data) {
-        console.log("收到操作广播：", data);
+        console.log("广播动作：", data);
     });
 
-    // 示例按钮
     setTimeout(() => {
-      socket.emit("send_action", {player: "测试玩家", action: "进入系统"});
-    }, 1500);
+        socket.emit("send_action", {player: "测试玩家", action: "进入系统"});
+    }, 1000);
   </script>
 </body>
 </html>
