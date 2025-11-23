@@ -1,199 +1,32 @@
-<!-- templates/index.html -->
-<!doctype html>
-<html lang="zh-CN">
+<!DOCTYPE html>
+<html>
 <head>
-  <meta charset="utf-8" />
-  <title>NewBiz 多人商赛（演示）</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <script src="https://cdn.socket.io/4.6.1/socket.io.min.js"
-    integrity="sha384-..." crossorigin="anonymous"></script>
-  <style>
-    body{font-family:Arial, Helvetica, sans-serif; background:#f6f8fb; margin:12px}
-    .panel{background:#fff;padding:12px;border-radius:8px;box-shadow:0 2px 10px rgba(20,20,30,0.04); margin-bottom:12px}
-    .row{display:flex;gap:12px;align-items:center}
-    input,select,button{padding:8px;border-radius:6px;border:1px solid #ddd}
-    button{background:#2065D6;color:#fff;border:0;cursor:pointer}
-    table{width:100%;border-collapse:collapse}
-    th,td{padding:6px;border-bottom:1px solid #eee}
-    #log{height:160px;overflow:auto;background:#0c1220;color:#bfeaff;padding:8px;font-family:monospace}
-    .small{font-size:12px;color:#666}
-  </style>
+  <meta charset="utf-8">
+  <title>NewBiz Render Test</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.min.js"></script>
 </head>
+
 <body>
-  <h2>NewBiz 多人商赛（演示）</h2>
+  <h1>NewBiz Render 测试页面</h1>
+  <p id="status">正在连接服务器...</p>
 
-  <div class="panel">
-    <div class="row">
-      <input id="playerName" placeholder="输入玩家名称（示例：alice）" />
-      <select id="companySelect"></select>
-      <button id="btnClaim">认领公司</button>
-      <button id="btnRelease">释放公司</button>
-      <div style="margin-left:auto">
-        <button id="btnAdvance">推进到下一年（仅管理员）</button>
-      </div>
-    </div>
-    <div class="small">若多个同学要连接，请把本页部署到可访问的服务器（或用局域网 IP），每人打开并认领不同公司。</div>
-  </div>
+  <script>
+    var socket = io();
 
-  <div class="panel">
-    <div class="row">
-      <div style="flex:1">
-        <h4>公司状态</h4>
-        <div id="companyInfo"></div>
-      </div>
-      <div style="width:360px">
-        <h4>操作</h4>
-        <div id="actions">
-          <div class="row">
-            <select id="actSelect">
-              <option value="buy_miner">买矿机（¥100,000）</option>
-              <option value="buy_prod_line">买生产线（¥200,000）</option>
-              <option value="mine">开采原料</option>
-              <option value="produce">生产产品</option>
-              <option value="post_listing">上架原料出售</option>
-              <option value="buy_market">市场买原料</option>
-              <option value="sell_to_market">零售上架（价格）</option>
-              <option value="take_loan">贷款</option>
-            </select>
-          </div>
-          <div style="margin-top:8px">
-            <input id="paramMaterial" placeholder="原料 / 价格 / 数量" />
-            <button id="btnAction">执行</button>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+    socket.on("message", function(data) {
+        document.getElementById("status").innerHTML = data.msg;
+    });
 
-  <div class="panel">
-    <h4>全局市场与排行榜</h4>
-    <div id="marketListings"></div>
-    <div id="leaderboard"></div>
-  </div>
+    socket.on("broadcast_action", function(data) {
+        console.log("收到操作广播：", data);
+    });
 
-  <div class="panel">
-    <h4>日志</h4>
-    <div id="log"></div>
-  </div>
-
-<script>
-  const socket = io();
-
-  let playerName = null;
-  let claimedCompany = null;
-
-  function log(msg){ const el=document.getElementById('log'); el.innerText += msg + "\\n"; el.scrollTop = el.scrollHeight; }
-
-  // receive full game state
-  socket.on('game_state', (state) => {
-    // populate company select
-    const sel = document.getElementById('companySelect');
-    sel.innerHTML = '';
-    for(const cid in state.companies){
-      const c = state.companies[cid];
-      const opt = document.createElement('option');
-      opt.value = cid;
-      opt.text = `${cid} (${c.country}) ${c.owner ? " - 已被占" : ""}`;
-      sel.appendChild(opt);
-    }
-    renderState(state);
-  });
-
-  socket.on('claim_result', (r) => {
-    log("认领结果: " + JSON.stringify(r));
-    if(r.ok && r.company) {
-      claimedCompany = r.company.id;
-      document.getElementById('playerName').value = r.company.player_name || '';
-    }
-  });
-
-  socket.on('action_result', (r) => {
-    log("操作结果: " + JSON.stringify(r));
-  });
-
-  socket.on('rules_path', (d) => {
-    log("规则文档路径: " + d.path);
-  });
-
-  // UI handlers
-  document.getElementById('btnClaim').addEventListener('click', ()=>{
-    playerName = document.getElementById('playerName').value || 'player';
-    const cid = document.getElementById('companySelect').value;
-    socket.emit('claim_company', {company_id: cid, player_name: playerName});
-  });
-  document.getElementById('btnRelease').addEventListener('click', ()=>{
-    const cid = document.getElementById('companySelect').value;
-    socket.emit('release_company', {company_id: cid});
-    claimedCompany = null;
-  });
-
-  document.getElementById('btnAction').addEventListener('click', ()=>{
-    if(!claimedCompany){
-      alert('请先认领公司');
-      return;
-    }
-    const action = document.getElementById('actSelect').value;
-    const rawParam = document.getElementById('paramMaterial').value.trim();
-    let params = {};
-    if(action === 'mine'){
-      const [material, qty] = rawParam.split(',').map(x=>x && x.trim());
-      params.material = material || '木材';
-      params.qty = qty || 100;
-    } else if(action === 'produce'){
-      params.qty = parseInt(rawParam) || 100;
-    } else if(action === 'post_listing'){
-      const [material, qty, price] = rawParam.split(',').map(x=>x && x.trim());
-      params.material = material; params.qty = parseInt(qty)||0; params.price = parseInt(price)||0;
-    } else if(action === 'buy_market'){
-      const [material, qty, maxp] = rawParam.split(',').map(x=>x && x.trim());
-      params.material = material; params.qty = parseInt(qty)||0; params.max_price = parseInt(maxp)||1000000;
-    } else if(action === 'sell_to_market'){
-      params.price = parseInt(rawParam) || 4000;
-    } else if(action === 'take_loan'){
-      const [amt, term, rate] = rawParam.split(',').map(x=>x && x.trim());
-      params.amount = parseInt(amt)||1000000; params.term = parseInt(term)||1; params.rate = parseFloat(rate)||0.12;
-    }
-    socket.emit('player_action', {action, company_id: claimedCompany, params});
-  });
-
-  document.getElementById('btnAdvance').addEventListener('click', ()=>{
-    socket.emit('advance_year', {});
-  });
-
-  // initial request for rules
-  socket.emit('get_rules', {});
-  // helper to render state
-  function renderState(state){
-    // show current year
-    log(`年：${state.year} (试运营? ${state.is_trial})`);
-    // populate companies status
-    const compDiv = document.getElementById('companyInfo');
-    compDiv.innerHTML = '';
-    for(const cid in state.companies){
-      const c = state.companies[cid];
-      const box = document.createElement('div');
-      box.innerHTML = `<b>${c.name}</b> (${c.country})<br>现金: ${Math.round(c.cash)} 产品库存: ${c.inventory_products} 品牌: ${c.brand_value.toFixed(2)}<br>原料: ${JSON.stringify(c.inventory_raw)}<hr>`;
-      compDiv.appendChild(box);
-    }
-    // show market listings
-    const ml = document.getElementById('marketListings');
-    ml.innerHTML = '<h4>市场挂牌</h4>';
-    for(const mat in state.market_listings){
-      const arr = state.market_listings[mat];
-      ml.innerHTML += `<div><b>${mat}</b>: ${arr.map(x=>`${x.qty}@${x.price}(${x.seller})`).join(' , ')}</div>`;
-    }
-    // leaderboard (simple)
-    const lb = document.getElementById('leaderboard');
-    const comps = Object.values(state.companies).sort((a,b)=> (b.total_assets||0) - (a.total_assets||0));
-    let html = '<h4>排行榜</h4><table><tr><th>名次</th><th>公司</th><th>资产</th><th>品牌</th></tr>';
-    for(let i=0;i<comps.length;i++){
-      const c = comps[i];
-      html += `<tr><td>${i+1}</td><td>${c.name}</td><td>${Math.round(c.total_assets)}</td><td>${c.brand_value.toFixed(2)}</td></tr>`
-    }
-    html += '</table>';
-    lb.innerHTML = html;
-  }
-</script>
+    // 示例按钮
+    setTimeout(() => {
+      socket.emit("send_action", {player: "测试玩家", action: "进入系统"});
+    }, 1500);
+  </script>
 </body>
 </html>
+
 
